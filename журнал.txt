@@ -143,7 +143,39 @@ deployer:
 ------------
 меняем пайплайн под требования к имени
 
+------------
+меняем пайплайн под требования к имени
 
+
+stages:
+    - build
+    - deploy
+image: docker:latest
+services:
+- name : docker:latest
+  alias: thedockerhost
+    #- docker:latest  
+variables:
+   DOCKER_HOST: tcp://thedockerhost:2375/
+   DOCKER_DRIVER: overlay2
+   DOCKER_TLS_CERTDIR: ""
+
+builder:
+    stage: build
+    script:
+     - docker build -t hello:gitlab-$CI_COMMIT_SHORT_SHA .
+    except:
+      - main
+deployer:
+  stage: deploy
+  script:
+    - docker build -t $CI_REGISTRY/barmaq/netology/hello:gitlab-$CI_COMMIT_SHORT_SHA .
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker push $CI_REGISTRY/barmaq/netology/hello:gitlab-$CI_COMMIT_SHORT_SHA
+  only:
+    - main
+	
+----------
 
 
 
@@ -151,6 +183,7 @@ deployer:
         return {'version': 3, 'method': 'GET', 'message': 'Already started'}
 меняем на 
         return {'version': 3, 'method': 'GET', 'message': 'Running'}
+
 
 
 
