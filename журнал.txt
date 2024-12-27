@@ -1,0 +1,162 @@
+
+
+
+89.169.141.50
+barmaq.gitlab.yandexcloud.net
+Сгенерированный пароль находится в файле /etc/gitlab/initial_root_password
+
+root
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+
+---
+создадим раннер
+89.169.158.18
+
+установка
+# Download the binary for your system
+sudo curl -L --output /usr/local/bin/gitlab-runner https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-amd64
+
+# Give it permission to execute
+sudo chmod +x /usr/local/bin/gitlab-runner
+
+# Create a GitLab Runner user
+sudo useradd --comment 'GitLab Runner' --create-home gitlab-runner --shell /bin/bash
+
+# Install and run as a service
+sudo gitlab-runner install --user=gitlab-runner --working-directory=/home/gitlab-runner
+sudo gitlab-runner start
+
+дружим с докером, если запускаем раннер под другим пользователем - указываем его
+sudo groupadd docker
+sudo usermod -aG docker ${USER}
+sudo chmod 666 /var/run/docker.sock
+sudo systemctl restart docker
+
+
+----
+регистрируем раннер
+
+в "Settings" > "CI/CD" > "Runners" проекта, группы или всей инстанции скопируйте токен для регистрации
+gitlab-runner register  --url http://89.169.141.50  --token glrt-xxxxxxxxxxxxxxxxxxxxx
+
+проверяем чтобы стояли права c привелегиями для докера у раннера
+в /etc/gitlab-runner/config.toml или в вашей конфигурации ( обычнов  корне ) добавляем аналог docker run --privileged в конфиг
+конфиг должен выглдяеть примерно так  
+
+[runners.docker]
+    tls_verify = false
+    image = "alpine:3.4"
+    privileged = true
+    disable_cache = false
+    volumes = ["/cache"]
+
+
+запускаем
+sudo gitlab-runner run
+
+
+
+
+наполняем проект
+----
+python-api.py
+----
+from flask import Flask, request
+from flask_restful import Resource, Api
+from json import dumps
+from flask_jsonpify import jsonify
+
+app = Flask(__name__)
+api = Api(app)
+
+class Info(Resource):
+    def get(self):
+        return {'version': 3, 'method': 'GET', 'message': 'Already started'}
+
+api.add_resource(Info, '/get_info')
+
+if __name__ == '__main__':
+     app.run(host='0.0.0.0', port='5290')
+
+
+
+
+
+так как cent0s7 устарел, регистрируем vault репозиторий вместо старого mirror.centos.org в 2 и 3 строчках
+dockerfile
+--------
+FROM centos:7
+RUN sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
+RUN sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
+RUN yum install python3 python3-pip -y
+COPY requirements.txt requirements.txt
+RUN pip3 install -r requirements.txt
+WORKDIR /python_api
+COPY python-api.py python-api.py
+EXPOSE 5290
+CMD ["python3", "python-api.py"]
+
+
+
+--------
+requirements.txt
+---
+flask
+flask-jsonpify
+flask-restful
+
+
+
+--------
+.gitlab-ci.yml
+---
+stages:
+    - build
+    - deploy
+image: docker:latest
+services:
+- name : docker:latest
+  alias: thedockerhost
+    #- docker:latest  
+variables:
+   DOCKER_HOST: tcp://thedockerhost:2375/
+   DOCKER_DRIVER: overlay2
+   DOCKER_TLS_CERTDIR: ""
+builder:
+    stage: build
+    script:
+      - docker build -t some_local_build:latest .
+    except:
+      - main
+deployer:
+  stage: deploy
+  script:
+    - docker build -t $CI_REGISTRY/barmaq/netology/python-api:latest .
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker push $CI_REGISTRY/barmaq/netology/python-api:latest
+  only:
+    - main
+
+	
+
+------------
+меняем пайплайн под требования к имени
+
+
+
+
+
+меняем апи - в пайтон  скрипте 
+        return {'version': 3, 'method': 'GET', 'message': 'Already started'}
+меняем на 
+        return {'version': 3, 'method': 'GET', 'message': 'Running'}
+
+
+
+
+docker login barmaq.gitlab.yandexcloud.net:5050
+docker pull barmaq.gitlab.yandexcloud.net:5050/barmaq/netology/hello:gitlab-fc968596
+docker run -p 5290:5290 -d barmaq.gitlab.yandexcloud.net:5050/barmaq/netology/hello:gitlab-fc968596
+docker ps
+curl localhost:5290/get_info
