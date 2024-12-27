@@ -63,8 +63,8 @@ flask-restful
         return {'version': 3, 'method': 'GET', 'message': 'Already started'}
 ```
 вливаем изменения в master  
-![build_issue](/images/build_issue.png) 
-
+![build_issue](/images/build_issue.png)  
+![merge_issue](/images/merge_issue.png)   
 
 
 ### Tester
